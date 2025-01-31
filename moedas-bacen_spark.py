@@ -77,8 +77,15 @@ with DAG(
     dag_id='moedas_bacen-spark',
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
-    catchup=False,
+    catchup=True,
 ) as dag:
+    
+    # Task: Create
+    create_task = PythonOperator(
+        task_id='create',
+        python_callable=create,
+        provide_context=True
+    )
 
     # Task: Extract
     extract_task = PythonOperator(
@@ -100,14 +107,6 @@ with DAG(
         ]
     )
 
-    # Task: Create
-    create_task = PythonOperator(
-        task_id='create',
-        python_callable=create,
-        provide_context=True
-    )
-
     # Setting up task dependencies
-
     create_task >> extract_task >> transform_and_load_task
     
