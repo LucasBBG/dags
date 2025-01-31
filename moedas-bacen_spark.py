@@ -44,66 +44,8 @@ def extract(**kwargs):
         logging.error(f"Erro ao extrair dados: {e}")
 
 
-# Transforming csv data into dataframe with PySpark
-def transform_and_load(file_path, **kwargs):
-    print(file_path)
-    columns = [
-        "data_fechamento",
-        "cod",
-        "tipo",
-        "desc_moeda",
-        "taxa_compra",
-        "taxa_venda",
-        "paridade_compra",
-        "paridade_venda"
-    ]
-    
-    # Inicializando o SparkSession
-    spark = SparkSession.builder \
-        .appName('TransformAndLoad') \
-        .config("spark.jars", "/opt/spark/jars/postgresql-42.7.5.jar") \
-        .getOrCreate()
-
-    if file_path:
-        # Criando um DataFrame PySpark a partir do CSV
-        df = spark.read.csv(file_path, header=False, sep=";")
-        df = df.toDF(*columns)
-
-        # Convertendo os tipos de dados das colunas
-        from pyspark.sql.functions import col
-        df = df.withColumn("taxa_compra", regexp_replace(col("taxa_compra"), ",", ".").cast("float"))
-        df = df.withColumn("taxa_venda", regexp_replace(col("taxa_venda"), ",", ".").cast("float"))
-        df = df.withColumn("paridade_compra", regexp_replace(col("paridade_compra"), ",", ".").cast("float"))
-        df = df.withColumn("paridade_venda", regexp_replace(col("paridade_venda"), ",", ".").cast("float"))
-        df = df.withColumn("data_fechamento", to_date(col("data_fechamento"), "dd/MM/yyyy"))
-        df = df.withColumn("processed_at", current_timestamp())
-
-        df.show()
-        df.createOrReplaceTempView("temp_table_moedas")
-
-        spark.sql("SHOW TABLES").show()
-
-
-        # Realizando a carga no PostgreSQL (usando o método jdbc do PySpark)
-        spark_to_jdbc_job = SparkJDBCOperator(
-            cmd_type="spark_to_jdbc",
-            jdbc_table="moedas",
-            spark_jars="${SPARK_HOME}/jars/postgresql-42.7.5.jar",
-            jdbc_conn_id='jdbc-default',
-            jdbc_driver="org.postgresql.Driver",
-            metastore_table="temp_table_moedas",
-            save_mode="append",
-            task_id="spark_to_jdbc_job",
-        )
-
-        spark_to_jdbc_job
-        logging.info("Dados transformados e carregados com sucesso!")
-
-    spark.stop()
-
-
 # Creating table if not exists
-def create():
+def create(**kwargs):
     pg_hook = PostgresHook(postgres_conn_id='postgres_bacen')
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
@@ -130,7 +72,6 @@ def create():
         cursor.close()
         conn.close()
 
-
 # Defining the DAG
 with DAG(
     dag_id='moedas_bacen-spark',
@@ -148,11 +89,15 @@ with DAG(
     )
 
     # Task: Transform and Load
-    transform_and_load_task = PythonOperator(
+    transform_and_load_task = SparkSubmitOperator(
         task_id='transform_and_load',
-        python_callable=transform_and_load,
-        provide_context=True,
-        op_kwargs={'file_path': '{{ task_instance.xcom_pull(task_ids="extract", key="file_path") }}'},
+        application="/home/dev-linux/airflow/spark/scritps/transform_and_load.py",
+        conn_id="spark_default",
+        jars="/opt/spark/jars/postgresql-42.7.5.jar",
+        verbose=True,
+        application_args=[
+            "{{ ti.xcom_pull(task_ids='extract', key='file_path') }}"
+        ]
     )
 
     # Task: Create
@@ -163,4 +108,6 @@ with DAG(
     )
 
     # Setting up task dependencies
+
     create_task >> extract_task >> transform_and_load_task
+    
