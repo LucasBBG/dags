@@ -89,7 +89,7 @@ def transform_and_load(file_path, **kwargs):
             cmd_type="spark_to_jdbc",
             jdbc_table="moedas",
             spark_jars="${SPARK_HOME}/jars/postgresql-42.7.5.jar",
-            # jdbc_conn_id='jdbc-default'
+            jdbc_conn_id='jdbc-default',
             jdbc_driver="org.postgresql.Driver",
             metastore_table="temp_table_moedas",
             save_mode="append",
