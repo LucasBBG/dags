@@ -126,7 +126,7 @@ with DAG(
         application="/home/dev-linux/airflow/spark/scritps/transformAndLoadToStage_moedas.py",
         jars="/opt/spark/jars/postgresql-42.7.5.jar",
         verbose=True,
-        application_args=["{{ ti.xcom_pull(task_ids='extract', key='file_path') }}"]
+        application_args=["{{ ti.xcom_pull(task_ids='extractData', key='file_path') }}"]
     )
 
     # Task: Load to Production (Upsert)
