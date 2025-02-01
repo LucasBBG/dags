@@ -52,7 +52,9 @@ def extractingData(**kwargs):
     logging.warning(f"URL: {full_url}")
     try:
         response = requests.get(full_url)
-        if response.status_code == 200:
+        if response.status_code != 200 or not response.content:
+            raise AirflowFailException(f"Falha na extração de dados: Resposta vazia ou erro {response.status_code}")
+        else:
             csv_data = response.content.decode("utf-8")
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             filename = f"fechamento_bcb_{date_onedayago}_{timestamp}.csv"
