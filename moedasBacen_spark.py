@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 import os
 from airflow import DAG
+from airflow.exceptions import AirflowFailException
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.operators.python import PythonOperator
@@ -67,6 +68,7 @@ def extractingData(**kwargs):
             return file_path
     except Exception as e:
         logging.error(f"Erro ao extrair dados: {e}")
+        raise AirflowFailException(f"Falha na extração de dados: {e}")
 
 # Loading to production (upsert)
 def loadingToProduction(**kwargs):
@@ -101,22 +103,24 @@ with DAG(
     dag_id='moedasBacen_spark',
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
+    max_active_runs=1,
     catchup=True,
 ) as dag:
     
-    # Task: Create Tables
-    createTables_task = PythonOperator(
-        task_id='createTables',
-        python_callable=creatingTables,
-        provide_context=True
-    )
-
     # Task: Extract Data
     extractData_task = PythonOperator(
         task_id='extractData',
         python_callable=extractingData,
         provide_context=True,
-        op_kwargs={'date_nodash': '{{ ds_nodash }}'},
+        op_kwargs={'date_nodash': '{{ ds_nodash }}'}
+    )
+
+    # Task: Create Tables
+    createTables_task = PythonOperator(
+        task_id='createTables',
+        python_callable=creatingTables,
+        provide_context=True,
+        depends_on_past=True
     )
 
     # Task: Transform and Load to Stage
@@ -125,15 +129,17 @@ with DAG(
         conn_id="spark_default",
         application="/home/dev-linux/airflow/spark/scritps/transformAndLoadToStage_moedas.py",
         jars="/opt/spark/jars/postgresql-42.7.5.jar",
+        application_args=["{{ ti.xcom_pull(task_ids='extractData', key='file_path') }}"],
         verbose=True,
-        application_args=["{{ ti.xcom_pull(task_ids='extractData', key='file_path') }}"]
+        depends_on_past=True
     )
 
     # Task: Load to Production (Upsert)
     loadToProduction_task = PythonOperator(
         task_id='loadToProduction',
         python_callable=loadingToProduction,
-        provide_context=True
+        provide_context=True,
+        depends_on_past=True
     )
 
     # Setting up task dependencies
