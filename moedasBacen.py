@@ -129,7 +129,7 @@ def create():
 
 # Defining the DAG
 with DAG(
-    dag_id='moedas_bacen',
+    dag_id='moedasBacen',
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
     catchup=True,

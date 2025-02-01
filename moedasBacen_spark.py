@@ -69,7 +69,7 @@ def create(**kwargs):
 
 # Defining the DAG
 with DAG(
-    dag_id='moedas_bacen-spark',
+    dag_id='moedasBacen-spark',
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
     catchup=True,
