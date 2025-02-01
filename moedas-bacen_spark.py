@@ -1,5 +1,3 @@
-import psycopg2
-from psycopg2.extras import execute_values
 import requests
 import logging
 from datetime import datetime, timedelta
@@ -7,10 +5,7 @@ import os
 from airflow import DAG
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
-from airflow.providers.apache.spark.operators.spark_jdbc import SparkJDBCOperator
 from airflow.operators.python import PythonOperator
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import current_timestamp, regexp_replace, to_date
 
 # Extracting csv data
 def extract(**kwargs):
