@@ -52,9 +52,7 @@ def extractingData(**kwargs):
     logging.warning(f"URL: {full_url}")
     try:
         response = requests.get(full_url)
-        if response.status_code != 200 or not response.content:
-            raise AirflowFailException(f"Falha na extração de dados: Resposta vazia ou erro {response.status_code}")
-        else:
+        if response.status_code == 200 and response.content != None:
             csv_data = response.content.decode("utf-8")
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             filename = f"fechamento_bcb_{date_onedayago}_{timestamp}.csv"
@@ -68,18 +66,23 @@ def extractingData(**kwargs):
 
             kwargs['ti'].xcom_push(key='file_path', value=file_path)
             return file_path
+        else:
+            logging.error(f"Erro ao extrair dados: {e}")
+            raise AirflowFailException(f"Falha na extração de dados: Resposta vazia ou erro {response.status_code}")
     except Exception as e:
         logging.error(f"Erro ao extrair dados: {e}")
         raise AirflowFailException(f"Falha na extração de dados: {e}")
 
 # Loading to production (upsert)
 def loadingToProduction(**kwargs):
+    date_airflow = datetime.strptime(kwargs["date"], "%Y-%m-%d").date()
+    date_extracted = date_airflow - timedelta(days=1)
     pg_hook = PostgresHook(postgres_conn_id='postgres_bacen')
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
-    upsert_data_sql = """
+    upsert_data_sql = f"""
         INSERT INTO moedas
-        SELECT * FROM stg_moedas
+        SELECT * FROM stg_moedas WHERE data_fechamento = '{date_extracted}' AND processed_at = (SELECT MAX(processed_at) FROM stg_moedas WHERE data_fechamento = '{date_extracted}')
         ON CONFLICT (data_fechamento, cod)
         DO UPDATE SET
             tipo = EXCLUDED.tipo,
@@ -105,10 +108,17 @@ with DAG(
     dag_id='moedasBacen_spark',
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
-    max_active_runs=1,
-    catchup=True,
+    # max_active_runs=1,
+    catchup=True
 ) as dag:
-    
+
+    # Task: Create Tables
+    createTables_task = PythonOperator(
+        task_id='createTables',
+        python_callable=creatingTables,
+        provide_context=True
+    )
+
     # Task: Extract Data
     extractData_task = PythonOperator(
         task_id='extractData',
@@ -117,23 +127,14 @@ with DAG(
         op_kwargs={'date_nodash': '{{ ds_nodash }}'}
     )
 
-    # Task: Create Tables
-    createTables_task = PythonOperator(
-        task_id='createTables',
-        python_callable=creatingTables,
-        provide_context=True,
-        depends_on_past=True
-    )
-
     # Task: Transform and Load to Stage
     transformAndLoadToStage_task = SparkSubmitOperator(
         task_id='transformAndLoadToStage',
         conn_id="spark_default",
         application="/home/dev-linux/airflow/spark/scritps/transformAndLoadToStage_moedas.py",
         jars="/opt/spark/jars/postgresql-42.7.5.jar",
-        application_args=["{{ ti.xcom_pull(task_ids='extractData', key='file_path') }}"],
         verbose=True,
-        depends_on_past=True
+        application_args=["{{ ti.xcom_pull(task_ids='extractData', key='file_path') }}"]
     )
 
     # Task: Load to Production (Upsert)
@@ -141,7 +142,7 @@ with DAG(
         task_id='loadToProduction',
         python_callable=loadingToProduction,
         provide_context=True,
-        depends_on_past=True
+        op_kwargs={'date': '{{ ds }}'}
     )
 
     # Setting up task dependencies
