@@ -44,18 +44,18 @@ def creatingTables(**kwargs):
 # Extracting csv data
 def extractingData(**kwargs):
     date = kwargs["date_nodash"] 
-    today = datetime.strptime(date, "%Y%m%d")
-    onedayago = today - timedelta(days=1)
-    date_onedayago = onedayago.strftime("%Y%m%d")
+    # today = datetime.strptime(date, "%Y%m%d")
+    # onedayago = today - timedelta(days=1)
+    # date_onedayago = onedayago.strftime("%Y%m%d")
     base_url = "https://www4.bcb.gov.br/Download/fechamento/"
-    full_url = f"{base_url}{date_onedayago}.csv"
+    full_url = f"{base_url}{date}.csv"
     logging.warning(f"URL: {full_url}")
     try:
         response = requests.get(full_url)
         if response.status_code == 200 and response.content != None:
             csv_data = response.content.decode("utf-8")
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            filename = f"fechamento_bcb_{date_onedayago}_{timestamp}.csv"
+            filename = f"fechamento_bcb_{date}_{timestamp}.csv"
             save_dir = "/home/dev-linux/airflow/files/"
             os.makedirs(save_dir, exist_ok=True)
             file_path = os.path.join(save_dir, filename)
@@ -75,8 +75,9 @@ def extractingData(**kwargs):
 
 # Loading to production (upsert)
 def loadingToProduction(**kwargs):
-    date_airflow = datetime.strptime(kwargs["date"], "%Y-%m-%d").date()
-    date_extracted = date_airflow - timedelta(days=1)
+    # date_airflow = datetime.strptime(kwargs["date"], "%Y-%m-%d").date()
+    # date_extracted = date_airflow - timedelta(days=1)
+    date_extracted = kwargs["date"]
     pg_hook = PostgresHook(postgres_conn_id='postgres_bacen')
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
