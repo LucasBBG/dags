@@ -7,6 +7,8 @@ from airflow.exceptions import AirflowFailException
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.operators.python import PythonOperator
+from pendulum import timezone
+
 
 # Function to create stg and prod tables
 def createTable(table_name, **kwargs):
@@ -104,11 +106,13 @@ def loadingToProduction(**kwargs):
         cursor.close()
         conn.close()
 
+local_tz = timezone("America/Sao_Paulo")
+
 # Defining the DAG
 with DAG(
     dag_id='moedasBacen_spark',
     start_date=datetime(2024, 1, 1),
-    schedule="@daily",
+    schedule="30 8 * * *",
     # max_active_runs=1,
     catchup=True
 ) as dag:
