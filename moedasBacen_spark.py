@@ -111,8 +111,8 @@ local_tz = timezone("America/Sao_Paulo")
 # Defining the DAG
 with DAG(
     dag_id='moedasBacen_spark',
-    start_date=datetime(2024, 1, 1),
-    schedule="30 8 * * *",
+    start_date=datetime(2024, 1, 1, tzinfo=local_tz),
+    schedule="0 14 * * *",
     # max_active_runs=1,
     catchup=True
 ) as dag:
