@@ -9,7 +9,6 @@ from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOpe
 from airflow.operators.python import PythonOperator
 from pendulum import timezone
 
-
 # Function to create stg and prod tables
 def createTable(table_name, **kwargs):
     pg_hook = PostgresHook(postgres_conn_id='postgres_bacen')
